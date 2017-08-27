@@ -1,0 +1,104 @@
+
+
+instrument:
+write -> insert after
+
+tsan_interface.cc  __tsan_init  after tsan init, init ufo
+tsan_rtl.cc  727 751  func in, func out
+
+sanitizer_internal_defs.h               : undefine SANITIZER_DEBUG, disable CHECK by setting cond to false
+
+sanitizer_flags.h                       : disable interceptors for *print*, and some str*
+
+lib/tsan/CMakeLists.txt 				: exclude asan ...
+tsan_new_delete.cc                      : 2  pc -> caller_pc
+tsan/rtl/tsan_defs.h  					:no hitory
+tsan/rtl/tsan_flags.inc 		 		:no report
+tsan/rtl/tsan_interceptors.cc 		 	: pc -> caller_pc
+tsan/rtl/tsan_interface.cc 		 		: ufo init
+tsan/rtl/tsan_mman.cc 		 			: ufo on alloc dealloc
+tsan/rtl/tsan_rtl.cc 			 		: MemoryAccessImpl1 -> del // not called
+                                                UnalignedMemoryAccess -> replace
+                                                 MemoryAccess   -> replace
+                                                 MemoryAccessImpl -> del // not called
+                                                 MemoryRangeSet -> replace
+                                                 MemoryRangeFreed  -> del
+                                                 MemoryRangeImitateWrite -> del
+                                                 MemoryResetRange -> del // same function as MemoryRangeImitateWrite above
+                                                                            used after allocation, called by interceptors mainly
+                                                 MemoryRangeSet -> del // not called
+
+tsan/rtl/tsan_rtl_mutex.cc 				        : skip read atomic; ufo lock unlock; remove atomic read write
+
+tsan/rtl/tsan_rtl_thread.cc OnCreated ln 56		: ufo on fork join  MemoryAccessRange
+
+
+tsan/rtl/tsan_interceptors.cc:  1046 cond wait signal broadcast
+
+remove func in out {
+tsan_interface_ann.cc 37 ScopedAnnotation
+tsan_interface_java.cc Scoped*
+tsan_interface_atomic.cc 855 Scoped*  also in macro
+
+
+tsan/rtl/tsan_interceptors.cc 264 ScopedInterceptor
+}
+-----------------------------------------------------------------------------------------------------------------
+
+creating thread:
+
+tsan/rtl/tsan_interceptors.cc:936:   TSAN_INTERCEPTOR(int, pthread_create,               int tid = ThreadCreate(
+                                        ((TsanInterceptorContext *)ctx)->caller_pc,
+                                        20188 pc -> caller_pc
+
+>>>> main thread call stack:
+
+tsan/rtl/tsan_rtl_thread.cc-233-int ThreadCreate                                         CreateThread
+sanitizer_common/sanitizer_thread_registry.cc:152: ThreadRegistry::CreateThread          tctx->SetCreated
+sanitizer_common/sanitizer_thread_registry.cc-68-void ThreadContextBase::SetCreated      OnCreated(arg);
+tsan/rtl/tsan_rtl_thread.cc:56:void ThreadContext::OnCreated(void *arg)
+
+>>> child thread:
+tsan_interceptors __tsan_thread_start_func
+tsan_rtl_thread  ThreadStart
+sanitizer_thread_registry   StartThread
+sanitizer_thread_registry  SetStarted
+tsan_rtl_thread             OnStarted
+
+
+
+tsan_rtl.cc 70
+static ThreadContextBase *CreateThreadContext(u32 tid)
+sanitizer_thread_registry StartThread
+
+-----------------------------------------------------------------------------------------------------------------
+steps to add new event:
+
+declare function in ufo_interface.h
+find place in tsan rtl and insert the call
+add event type in  ufo_interface.h
+define event in ufo_interface.h
+define function pointer type in ufo.h
+add function pointer in ufo.h
+
+implement dummy (safe) function
+implement function
+
+init func pointer in ufo.h with dummy
+assign dummy to func pointer in UFOContext::stop_trace ...
+assign func impl in UFOContext::start_trace
+
+additional:
+modify stat and add counters
+
+-----------------------------------------------------------------------------------------------------------------
+
+
+
+to do:
+store thread local storage, thread stack address range
+??? remove some lib
+remove some interceptors
+#remove tsan call stack tracing
+sanitizer_platform_interceptors.h
+opt allocator
