@@ -33,8 +33,8 @@ static void _reset_read(int tid, u64 mtx_id) {
   // read 1 byte before lock, drop this read
   const u64 esz = sizeof(MemAccEvent) + 1;
   if (LIKELY(buf.size_ >= esz)) {
-    if (LIKELY(buf.buf_[buf.size_ - esz] == EventType::MemRead)) { // 8 -> read 1 byte
-      u64 addr = *((u64*)(buf.buf_ + buf.size_ - esz + 7));
+    if (LIKELY(buf.buf_[buf.size_ - esz] == 8)) { // 8 -> read 1 byte
+      u64 addr = *((u64*)(buf.buf_ + buf.size_ - esz + 6));
       addr &= 0x0000ffffffffffff;
       if (LIKELY(addr == mtx_id)) {
         buf.size_ -= esz;
@@ -84,37 +84,16 @@ void impl_cond_wait(__tsan::ThreadState* thr, uptr pc, u64 addr_cond, u64 addr_m
   MC_STAT(thr, c_cond_wait)
 }
 
-ALWAYS_INLINE
-static void _reset_range_r(int tid, u64 cond_id) {
-  auto& buf = uctx->tlbufs[tid];
-  // read 8 byte cond before signal, drop this read
-  const u64 esz = sizeof(MemRangeAccEvent);
-  if (LIKELY(buf.size_ >= esz)) {
-    if (LIKELY(buf.buf_[buf.size_ - esz] == EventType::MemRangeRead)) { // type 10: range read
-      u64 addr = *((u64*)(buf.buf_ + buf.size_ - esz + 7));
-      addr &= 0x0000ffffffffffff;
-      if (LIKELY(addr == cond_id)) {
-        buf.size_ -= esz;
-#ifdef STAT_ON
-        uctx->stat[tid].c_range_r--;
-#endif
-        DPrintf("read range 8 bytes reset\r\n");
-      }
-    }
-  }
-}
 void impl_cond_signal(__tsan::ThreadState* thr, uptr pc, u64 addr_cond) {
   DPrintf("UFO>>> #%d cond signal     cond: %p   pc:%p\r\n", thr->tid, addr_cond, pc);
   const int tid = thr->tid;
   MC_STAT(thr, c_cond_signal)
-  _reset_range_r(tid, addr_cond);
 }
 
 void impl_cond_broadcast(__tsan::ThreadState* thr, uptr pc, u64 addr_cond) {
   DPrintf("UFO>>> #%d cond broadcast  cond: %p   pc:%p\r\n", thr->tid, addr_cond, pc);
   const int tid = thr->tid;
   MC_STAT(thr, c_cond_bc)
-  _reset_range_r(tid, addr_cond);
 }
 
 
@@ -126,6 +105,7 @@ void impl_cond_broadcast(__tsan::ThreadState* thr, uptr pc, u64 addr_cond) {
 //}
 void *impl_alloc(ThreadState *thr, uptr pc, void *addr_left, uptr size) {
   DPrintf("UFO>>> #%d allocate %llu bytes from %llu    pc:%p\r\n", thr->tid, size, addr_left, pc);
+  DPrintf("UFO>>> #%d allocate %p bytes from %p    pc:%p\r\n", thr->tid, size, addr_left, pc);
   const int tid = thr->tid;
   MC_STAT(thr, c_alloc)
   auto& buf = uctx->tlbufs[tid];

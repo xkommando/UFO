@@ -223,15 +223,13 @@ void ns_mem_acc_nv(ThreadState *thr, uptr pc, uptr addr, int kAccessSizeLog, boo
 
 __HOT_CODE
 void impl_mem_range_acc(__tsan::ThreadState *thr, uptr pc, uptr addr, uptr size, bool is_write) {
-  int tid = thr->tid;
   if (is_write) {
-    DPrintf("UFO>>> #%d range write mem to %llu    len %d    pc:%p  local?%d\r\n",
-            thr->tid, addr, size, pc, uctx->tlbufs[tid].is_thrlocal(addr));
+    DPrintf("UFO>>> #%d range write mem to %llu    len %d    pc:%p\r\n", thr->tid, addr, size, pc);
   } else {
-    DPrintf("UFO>>> #%d range read mem from %llu    len %d    pc:%p  local?%d\r\n",
-            thr->tid, addr, size, pc, uctx->tlbufs[tid].is_thrlocal(addr));
+    DPrintf("UFO>>> #%d range read mem from %llu    len %d    pc:%p\r\n", thr->tid, addr, size, pc);
   }
 
+  int tid = thr->tid;
 #ifdef STAT_ON
   if (is_write) {
     uctx->stat[tid].c_range_w++;
@@ -265,8 +263,18 @@ void ns_mem_range_acc(__tsan::ThreadState *thr, uptr pc, uptr addr, uptr size, b
 #endif
 
   TLBuffer &buf = uctx->tlbufs[tid];
-  if(buf.is_thrlocal(addr))
+  s64 ofs = addr - buf.stack_bottom;
+  if (0 < ofs && ofs < buf.stack_height) {
+    uctx->stat[tid].cs_acc++;
+    DPrintf(" skipped stack\r\n");
     return;
+  }
+  ofs = addr - buf.tls_bottom;
+  if (0 < ofs && ofs < buf.tls_height) {
+    uctx->stat[tid].cs_range_acc++;
+    DPrintf(" skipped tls\r\n");
+    return;
+  }
 
   if (is_write) {
     DPrintf("UFO>>> #%d range write mem to %llu    len %d    pc:%p\r\n", thr->tid, addr, size, pc);

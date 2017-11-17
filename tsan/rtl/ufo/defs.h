@@ -42,27 +42,30 @@ const int NO_STACK_ACC = 0;
 
 
 const char* const ENV_TL_BUF_SIZE = "UFO_TL_BUF";
-const unsigned long DEFAULT_BUF_PRE_THR = 30;
+const unsigned long DEFAULT_BUF_PRE_THR = 128; // 128 MB
 
 // uaf trace file directory
 const char* const ENV_TRACE_DIR = "UFO_TDIR";
 const char* const DEFAULT_TRACE_DIR = "ufo_traces";
 
 
-const char * const ENV_USE_COMPRESS = "UFO_COMPRESS"; // 0
+const char * const ENV_USE_COMPRESS = "UFO_COMPRESS";
+const int COMPRESS_ON = 1;
 
-const char * const ENV_USE_IO_Q = "UFO_ASYNC_IO"; // 0
+const char * const ENV_USE_IO_Q = "UFO_ASYNC_IO";
+const int ASYNC_IO_ON = 1;
 
 const char * const ENV_IO_Q_SIZE = "UFO_IO_Q";
 const int DEFAULT_IO_Q_SIZE = 4;
 
-const char* const ENV_TRACE_FUNC = "UFO_CALL"; // 1
+const char* const ENV_TRACE_FUNC = "UFO_CALL";
+
 
 const char * const ENV_NO_VALUE = "UFO_NO_VALUE";
 
 const char* const ENV_PRINT_STAT = "UFO_STAT";
 
-const char* const ENV_PTR_PROP = "UFO_PTR_PROP"; // 0
+const char* const ENV_PTR_PROP = "UFO_PTR_PROP";
 
 const unsigned int DIR_MAX_LEN = 255;
 

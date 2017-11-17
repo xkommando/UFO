@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <cerrno>
-#include <cstring>
 
 #include "../../../sanitizer_common/sanitizer_common.h"
 #include "../../../sanitizer_common/sanitizer_posix.h"
@@ -35,6 +34,13 @@ TLBuffer *G_BUF_BASE;
 // defined in ufo_rtl.cc
 extern UFOContext *uctx;
 
+void ___w(int fd, Byte* data, u64 len) {
+  u64 ret = (u64)__sanitizer::internal_write(fd, data, len);
+  if (ret != len) {
+
+  }
+
+}
 // thread safe, COMPRESS_ON
 void write_file(int fd, Byte* data, u64 len) {
   if (uctx->use_compression) {
@@ -57,12 +63,7 @@ void write_file(int fd, Byte* data, u64 len) {
     internal_write(fd, out, outlen);
     internal_free(out);
   } else {
-    uptr bytes_written = internal_write(fd, data, len);
-    int write_errno;
-    bool result;
-    if (__sanitizer::internal_iserror(bytes_written, &write_errno)) {
-      Printf(">>>!!! UFO write file error, code:[%d], %s\r\n", write_errno, strerror(write_errno));
-    }
+    internal_write(fd, data, len);
   }
 
 #ifdef SYNC_AT_FLUSH
@@ -85,19 +86,6 @@ void TLBuffer::init() {
   tls_bottom = -1;// lower address
   stack_height = -1;
   stack_bottom = -1;// lower address
-}
-
-bool TLBuffer::is_thrlocal(u64 addr) const {
-  if (addr > this->stack_bottom) {
-    u64 h = addr - this->stack_bottom;
-    if (h < this->stack_height)
-      return true;
-  } else if (addr > this->tls_bottom) {
-    u64 h = addr - this->tls_bottom;
-    if (h < tls_height)
-      return true;
-  }
-  return false;
 }
 
 void TLBuffer::open_buf() {
@@ -137,8 +125,7 @@ void TLBuffer::open_file(int tid) {
 
   this->trace_fd_ = __sanitizer::internal_open(file_name, O_CREAT | O_APPEND | O_WRONLY, 0666);
   if (trace_fd_ < 0) {
-    fprintf(stderr, "UFO>>>#%d could not open file '%s' fd:[%d] code:[%d] error %s\r\n",
-            tid, file_name, trace_fd_, errno, strerror(errno));
+    fprintf(stderr, "UFO>>>#%d could not open file '%s' code%d", tid, file_name, trace_fd_);
     perror("");
     Die();
   }

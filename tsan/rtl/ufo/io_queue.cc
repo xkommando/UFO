@@ -195,7 +195,7 @@ void OutQueue::stop() {
 //  REAL(pthread_join)((void*)pt_worker_, NULL);
   __sanitizer::real_pthread_join((void*)pt_worker_, NULL);
   lock();
-  //finish rest of the tasks
+  //finish rest task
   while (!is_empty()) {
     WriteTask* task = pop();
     if (task->size_ > 0) {

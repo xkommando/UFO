@@ -1,8 +1,5 @@
-UFO
-UFO: Use-After-Free Finder Optimal
 
 # Tracing
-
 ##Set up 
 
 

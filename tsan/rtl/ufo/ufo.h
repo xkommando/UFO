@@ -63,9 +63,6 @@ class UFOContext {
   bool is_subproc;
   u32 mudule_length_;
   atomic_uint32_t tl_buf_size_;
-
-  u64 module_data;
-
   // track all buffer allocation
   // resize tl buffer size dynamically
   __tsan::Mutex lock;

@@ -123,7 +123,6 @@ PACKED_STRUCT(UnlockEvent) {
 static_assert(sizeof(UnlockEvent) == 13, "compact struct (align 8) not supported, please use clang 3.8.1");
 
 
-//u64 idx: 48;
 PACKED_STRUCT(ThrCondWaitEvent) {
   static const u8 TYPE_INDEX = EventType::ThrCondWait;
   const u8 type_index = TYPE_INDEX;

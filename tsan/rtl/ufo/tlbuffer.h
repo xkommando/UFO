@@ -57,8 +57,6 @@ struct TLBuffer {
 
   bool is_file_open() const;
 
-  /// tls or stack
-  bool is_thrlocal(u64 addr) const;
 
 #pragma GCC diagnostic ignored "-Wcast-qual"
   template<typename E, u32 SZ = sizeof(E)>

@@ -9,6 +9,7 @@
 #include <sys/time.h>
 
 #include "../../../sanitizer_common/sanitizer_common.h"
+//#include "../../../sanitizer_common/sanitizer_symbolizer.h"
 #include <stdio.h>
 
 #include "../../../sanitizer_common/sanitizer_posix.h"
@@ -141,9 +142,6 @@ void UFOContext::start_trace() {
       fn_mem_acc = &ns_mem_acc;
     }
   }
-
-  fn_mem_range_acc = &ns_mem_range_acc;
-
   DPrintf("UFO>>>start tracing\r\n");
 }
 
@@ -171,7 +169,6 @@ void UFOContext::stop_trace() {
   fn_ptr_prop = &nop_ptr_prop;
   fn_ptr_deref = &nop_ptr_deref;
 }
-
 void UFOContext::read_config() {
 
   this->tl_buf_size_ = {0};
@@ -179,7 +176,7 @@ void UFOContext::read_config() {
   this->use_io_q = 0;
   this->out_queue_legth = -1;
 
-  this->do_print_stat_ = get_int_opt(ENV_PRINT_STAT, 0);
+  this->do_print_stat_ = get_int_opt(ENV_PRINT_STAT, 1);
 
   // buffer size
   u64 bufsz = (u64)get_int_opt(ENV_TL_BUF_SIZE, DEFAULT_BUF_PRE_THR);
@@ -213,11 +210,11 @@ void UFOContext::read_config() {
   ratio_mem_x4 = 0;
 
   // use snappy compression
-  s64 use_comp = get_int_opt(ENV_USE_COMPRESS, 0);
+  s64 use_comp = get_int_opt(ENV_USE_COMPRESS, COMPRESS_ON);
   this->use_compression = use_comp;
 
   // use async io queue
-  s64 do_use_q = get_int_opt(ENV_USE_IO_Q, 0);
+  s64 do_use_q = get_int_opt(ENV_USE_IO_Q, ASYNC_IO_ON);
   this->use_io_q = do_use_q;
   if (use_io_q) {
     // queue size
@@ -230,7 +227,7 @@ void UFOContext::read_config() {
     }
   }
 
-  s64 do_trace_call = get_int_opt(ENV_TRACE_FUNC, 1);
+  s64 do_trace_call = get_int_opt(ENV_TRACE_FUNC, 0);
   this->trace_func_call = do_trace_call;
 
   s64 do_trace_ptr_prop = get_int_opt(ENV_PTR_PROP, 0);
@@ -466,7 +463,6 @@ void UFOContext::save_module_info() {
   for (const auto &module : modules) {
 //      fprintf(fp, "%s %s %s %d", "We", "are", "in", 2012);
     fprintf(cfp, "%s|", module.full_name());
-    DPrintf("module: %s ",  module.full_name());
     uptr base = module.base_address();
     fprintf(cfp, "%llx|", base);
     for (const auto &range : module.ranges()) {
@@ -474,11 +470,9 @@ void UFOContext::save_module_info() {
       uptr start = range.beg;
       uptr end = range.end;
       fprintf(cfp, "%d|%llx|%llx|", range.executable, start, end);
-      DPrintf("%d|%llx|%llx|", range.executable, start, end);
 //      }
     }
     fprintf(cfp, "\r\n");
-    DPrintf("\r\n");
   }
   fclose(cfp);
   this->mudule_length_ = cur_len;
