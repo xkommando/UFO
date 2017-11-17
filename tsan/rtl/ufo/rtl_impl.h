@@ -1,6 +1,10 @@
 //
 // Created by cbw on 11/12/16.
 //
+//
+// actual implementation for tracing functions
+
+//(Bowen 2017-10-13)
 
 #ifndef UFO_RTL_IMPL_H
 #define UFO_RTL_IMPL_H
@@ -9,6 +13,10 @@
 #include "defs.h"
 #include "ufo_interface.h"
 #include "ufo.h"
+#include "report.h"
+
+
+//#include "_test_detect.h"
 
 //#define DPrintf Printf
 
@@ -52,7 +60,7 @@ void impl_mtx_lock(__tsan::ThreadState *thr, uptr pc, u64 mutex_id) {
   MC_STAT(thr, c_lock)
   DPrintf("UFO>>> #%d lock  mutex id:%llu    pc:%p\r\n", tid, mutex_id, pc);
   _reset_read(tid, mutex_id);
-  u64 _idx = __sync_add_and_fetch(&uctx->e_count, 1);
+  u64 _idx = __sync_add_and_fetch(&uctx->sync_seq, 1);
   uctx->tlbufs[tid].put_event(LockEvent(_idx, (u64)mutex_id, pc));
 }
 
@@ -104,18 +112,27 @@ void impl_cond_broadcast(__tsan::ThreadState* thr, uptr pc, u64 addr_cond) {
 //
 //}
 void *impl_alloc(ThreadState *thr, uptr pc, void *addr_left, uptr size) {
-  DPrintf("UFO>>> #%d allocate %llu bytes from %llu    pc:%p\r\n", thr->tid, size, addr_left, pc);
-  DPrintf("UFO>>> #%d allocate %p bytes from %p    pc:%p\r\n", thr->tid, size, addr_left, pc);
+  DPrintf("UFO>>> #%d allocate %llu bytes from %p  pc:%p\r\n", thr->tid, size, addr_left, pc);
   const int tid = thr->tid;
   MC_STAT(thr, c_alloc)
   auto& buf = uctx->tlbufs[tid];
-  u64 _idx = __sync_add_and_fetch(&uctx->e_count, 1);
+  u64 _idx = __sync_add_and_fetch(&uctx->sync_seq, 1);
   buf.put_event(AllocEvent(_idx, (u64)addr_left, (u64)pc, (u32)size));
+
+//print_callstack(thr, pc);
+
+  u64 _alloc_mem_size = (u64)size;
+  buf.tl_alloc_size += _alloc_mem_size;
+//  u64 total_in_hold = __sync_add_and_fetch(&uctx->mem_hold, _alloc_mem_size);
+  uctx->mem_hold += _alloc_mem_size;
+  if (buf.mem_exceeded()) {
+    buf.release_all();
+  }
   return addr_left;
 }
 
 void impl_dealloc(ThreadState *thr, uptr pc, void *addr) {
-  DPrintf("UFO>>> #%d deallocate at %llu     pc:%p  \r\n", thr->tid, addr, pc);
+  DPrintf("UFO>>> #%d deallocate at %p  pc:%p  \r\n", thr->tid, addr, pc);
   const int tid = thr->tid;
   MC_STAT(thr, c_dealloc)
   TLBuffer& buf = uctx->tlbufs[tid];
@@ -135,8 +152,10 @@ void impl_dealloc(ThreadState *thr, uptr pc, void *addr) {
       }
     }
   }
-  u64 _idx = __sync_add_and_fetch(&uctx->e_count, 1);
+  u64 _idx = __sync_add_and_fetch(&uctx->sync_seq, 1);
   buf.put_event(DeallocEvent(_idx, (u64)addr, (u64)pc));
+
+  buf.put_free_ptr(addr);
 }
 
 #pragma GCC diagnostic ignored "-Wunused-function"
@@ -151,6 +170,7 @@ default: return (u64)-1;
 }
 #pragma GCC diagnostic warning "-Wunused-function"
 
+// called in parent thread, before kid starts
 void impl_thread_created(int tid_parent, int tid_kid, uptr pc) {
   DPrintf("UFO>>> (this tid %d) #%d -> #%d   pc:%p\r\n", cur_thread()->tid, tid_parent, tid_kid, pc);
 #ifdef STAT_ON
@@ -178,21 +198,25 @@ void impl_thread_created(int tid_parent, int tid_kid, uptr pc) {
   if (UNLIKELY(buf_kid.buf_ != nullptr && buf_kid.size_ > 0)) {
     buf_kid.flush();
   } else buf_kid.open_buf();
-
-  if (LIKELY(!buf_kid.is_file_open())) {
-    buf_kid.open_file(tid_kid);
-  }
-
+//  if (LIKELY(!buf_kid.is_file_open())) {
+//    buf_kid.open_file(tid_kid);
+//  }
   buf_kid.put_event(ThreadBeginEvent((TidType) tid_parent, (u64)pc, et));
 }
 
-// rewrite begin event
+// rewrite begin event, called in kid thread
 void impl_thread_started(__tsan::ThreadState* thr, uptr stk_addr, uptr stk_size, uptr tls_addr, uptr tls_size) {
   DPrintf("UFO>>>thread_started (this tid %d) #%d stack #%llu %d   tls:%llu %d\r\n",
          cur_thread()->tid, thr->tid, stk_addr, stk_size, tls_addr, tls_size);
 
   const int tid = thr->tid;
   auto& buf = uctx->tlbufs[tid];
+
+  buf.tls_height = (u32)tls_size;
+  buf.tls_bottom = (u64)tls_addr;// lower address
+  buf.stack_height = (u32)stk_size;
+  buf.stack_bottom = (u64)stk_addr;// lower address
+
   if (LIKELY(buf.size_ >= sizeof(ThreadBeginEvent))) {
     if (LIKELY(buf.buf_[buf.size_ - sizeof(ThreadBeginEvent)] == EventType::ThreadBegin)) {
       ThreadBeginEvent* e = (ThreadBeginEvent*)(buf.buf_ + buf.size_ - sizeof(ThreadBeginEvent));
@@ -202,6 +226,8 @@ void impl_thread_started(__tsan::ThreadState* thr, uptr stk_addr, uptr stk_size,
       e->tls_size = (u32)tls_size;
     }
   }
+//  buf.p_alloc_cache = &thr->proc()->alloc_cache;
+  buf.thr = thr;
 }
 
 void impl_thread_join(int tid_main, int tid_joiner, uptr pc) {
@@ -212,10 +238,20 @@ void impl_thread_join(int tid_main, int tid_joiner, uptr pc) {
 
   u32 et = (u32)(uctx->get_time_ms() - uctx->time_started);
   uctx->tlbufs[tid_main].put_event(JoinThreadEvent((TidType) tid_joiner, et, (u64)pc));
+//  auto &buf_kid = uctx->tlbufs[tid_joiner];
+//  buf_kid.put_event(ThreadEndEvent((TidType) tid_main, et));
+//  buf_kid.finish();
+}
 
-  auto &buf_kid = uctx->tlbufs[tid_joiner];
-  buf_kid.put_event(ThreadEndEvent((TidType) tid_main, et));
-  buf_kid.finish();
+void impl_thread_end(ThreadState *thr) {
+  DPrintf("UFO>>> thread end %d \r\n", thr->tid);
+
+  u32 et = (u32)(uctx->get_time_ms() - uctx->time_started);
+
+  auto &buf_kid = uctx->tlbufs[thr->tid];
+  buf_kid.put_event(ThreadEndEvent((TidType) 0, et));
+//  buf_kid.finish(); finish is called by analyzer
+  buf_kid.release_all();
 }
 
 void impl_enter_func(ThreadState *thr, uptr pc) {

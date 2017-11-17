@@ -40,6 +40,8 @@ uptr user_alloc_usable_size(const void *p);
 void invoke_malloc_hook(void *ptr, uptr size);
 void invoke_free_hook(void *ptr);
 
+void* ufo_batch_dealloc(void** p_buf, u32 ptr_count, void* cache);
+
 enum MBlockType {
   MBlockScopedBuf,
   MBlockString,

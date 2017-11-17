@@ -6,7 +6,12 @@
 
 #include "../../tsan_defs.h"
 #include "../../tsan_rtl.h"
-
+/**
+ * See https://google.github.io/snappy/
+ * adopted from https://github.com/andikleen/snappy-c
+ *
+ * (Bowen 2017-10-13)
+ */
 using __sanitizer::u8;
 using __sanitizer::u16;
 using __sanitizer::u32;

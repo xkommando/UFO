@@ -1,6 +1,9 @@
 //
 // Created by cbw on 9/26/16.
 //
+// UFO interfaces (called by Compiler-RT)
+// (Bowen 2017-10-13)
+//
 
 #ifndef UFO_UFO_RTL_H
 #define UFO_UFO_RTL_H
@@ -51,6 +54,11 @@ enum EventType {
   ThrCondBC,
   PtrDeRef = 20
 };
+
+//  00 00   00 00
+//      [other  ]
+//  [] <- R/W
+
 
 /*
 no pc on thread begin end events
@@ -356,6 +364,7 @@ void on_thread_start(__tsan::ThreadState* thr, uptr stk_addr, uptr stk_size, upt
 
 // called by main thread
 void on_thread_join(int tid_main, int tid_joiner, uptr pc);
+void on_thread_end(__tsan::ThreadState* thr);
 
 void on_mtx_lock(__tsan::ThreadState *thr, uptr pc, u64 mutex_id);
 void on_mtx_unlock(__tsan::ThreadState *thr, uptr pc, u64 mutex_id);
@@ -369,6 +378,10 @@ void on_cond_broadcast(__tsan::ThreadState* thr, uptr pc, u64 addr_cond);
 
 //void MemoryAccess(ThreadState *thr, uptr pc, uptr addr,
 //                  int kAccessSizeLog, bool kAccessIsWrite, bool kIsAtomic) {
+// 0 -> 1
+// 1 -> 2
+// 2 -> 4
+// 3 -> 8
 void on_mem_acc(__tsan::ThreadState *thr, uptr pc, uptr addr, int kAccessSizeLog, bool is_write);
 void on_mem_range_acc(__tsan::ThreadState *thr, uptr pc, uptr addr, uptr size, bool is_write);
 
@@ -382,6 +395,11 @@ void on_ptr_prop(__tsan::ThreadState *thr, uptr pc, uptr addr_src, uptr addr_des
 void before_fork();
 void parent_after_fork();
 void child_after_fork();
+
+
+
+void report(__tsan::ThreadState thrAlloc, __tsan::ThreadState thrAcc);
+
 
 } //extern "C"
 

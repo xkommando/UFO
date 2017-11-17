@@ -1,7 +1,13 @@
 //
 // Created by cbw on 9/26/16.
 //
-
+// a layer between interfaces and UFO control center
+// all functionality is controlled by UFOContext (singleton)
+//
+// WARN: do not execute any static operations except POD assignment
+//
+// (Bowen 2017-10-13)
+//
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -136,6 +142,11 @@ void on_thread_start(__tsan::ThreadState* thr, uptr stk_addr, uptr stk_size, upt
 
 void on_thread_join(int tid_main, int tid_joiner, uptr pc) {
   (*UFOContext::fn_thread_join)(tid_main, tid_joiner, pc);
+}
+
+
+void on_thread_end(__tsan::ThreadState* thr) {
+  (*UFOContext::fn_thread_end)(thr);
 }
 
 void enter_func(__tsan::ThreadState *thr, uptr pc) {

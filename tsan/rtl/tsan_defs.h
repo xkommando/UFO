@@ -47,7 +47,7 @@ const unsigned kMaxTidInClock = kMaxTid;  // Go does not track freed memory.
 #endif
 const int kClkBits = 42;
 const unsigned kMaxTidReuse = (1 << (64 - kClkBits)) - 1;
-const uptr kShadowStackSize = 64 * 1024;
+const uptr kShadowStackSize = 64 * 512;
 
 // Count of shadow values in a shadow cell.
 const uptr kShadowCnt = 4;

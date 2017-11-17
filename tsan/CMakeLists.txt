@@ -51,10 +51,12 @@ set(TSAN_SOURCES
   rtl/tsan_symbolize.cc
   rtl/tsan_sync.cc
         rtl/ufo/io_queue.cc
+        rtl/ufo/report.cc
         rtl/ufo/ufo_interface.cc
         rtl/ufo/tlbuffer.cc
         rtl/ufo/ufo.cc
         rtl/ufo/ufo_stat.cc
+        rtl/ufo/__test_ana.cc
         rtl/ufo/snappy/snappy.cc)
 
 set(TSAN_CXX_SOURCES
@@ -103,11 +105,14 @@ set(TSAN_HEADERS
         rtl/ufo/defs.h
         rtl/ufo/dummy_rtl.h
         rtl/ufo/io_queue.h
+        rtl/ufo/report.h
         rtl/ufo/rtl_impl.h
+        rtl/ufo/impl_mem_acc.h
         rtl/ufo/ufo_interface.h
         rtl/ufo/tlbuffer.h
         rtl/ufo/ufo.h
         rtl/ufo/ufo_stat.h
+        rtl/ufo/__test_ana.h
         rtl/ufo/snappy/snappy.h
         rtl/ufo/snappy/compat.h)
 

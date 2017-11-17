@@ -32,7 +32,7 @@ namespace ufo {
 
 using __sanitizer::internal_write;
 
-// defined in ufo_rtl.cc
+// defined in ufo_interface.cc
 extern UFOContext *uctx;
 
 static char* g_zip_buf = nullptr;
@@ -41,6 +41,7 @@ static struct snappy_env g_snappy_env;
 
 // called by one thread (OutQueue::pt_worker_) at a time, COMPRESS_ON
 void _do_write(int fd, Byte* data, u64 len) {
+  return;
   if (uctx->use_compression) {
     size_t outlen;
     g_snappy_env.scratch = 0; // reuse env.hashtable
@@ -110,17 +111,17 @@ void OutQueue::start(int len) {
     u32 sz = uctx->get_buf_size();
 
     taskq_[i].size_ = 0;
-    taskq_[i].fd_ = -1;
+//    taskq_[i].fd_ = -1;
     taskq_[i].cap_ = sz;
     taskq_[i].data_ = (Byte*)__tsan::internal_alloc(__tsan::MBlockScopedBuf, sz);
-    uctx->mem_acquired(sz);
+//    uctx->mem_acquired(sz);
   }
 
   if (uctx->use_compression) {
     snappy_init_env(&g_snappy_env);
     g_zipbuf_len = snappy_max_compressed_length(uctx->get_buf_size());
     g_zip_buf = (char *) __tsan::internal_alloc(__tsan::MBlockScopedBuf, g_zipbuf_len);
-    uctx->mem_acquired(g_zipbuf_len);
+//    uctx->mem_acquired(g_zipbuf_len);
   }
 
   __sanitizer::atomic_store_relaxed(&continue_, 1);
@@ -155,7 +156,8 @@ static void* _work_loop(void* p) {
     }
 
     WriteTask *task = q->pop();
-    _do_write(task->fd_, task->data_, task->size_);
+//    _do_write(task->fd_, task->data_, task->size_);
+    _do_write(-1, task->data_, task->size_);
 
     task->size_ = 0;
     q->notify_non_full();
@@ -170,7 +172,7 @@ void OutQueue::release_mem() {
     Byte **pp = &(taskq_[j].data_);
     if (*pp != nullptr) {
       __tsan::internal_free(*pp);
-      uctx->mem_released(taskq_[j].cap_);
+//      uctx->mem_released(taskq_[j].cap_);
     }
     *pp = nullptr;
   }
@@ -181,7 +183,7 @@ void OutQueue::release_mem() {
   if (uctx->use_compression) {
     if (g_zip_buf != nullptr) {
       __tsan::internal_free(g_zip_buf);
-      uctx->mem_released(g_zipbuf_len);
+//      uctx->mem_released(g_zipbuf_len);
     }
     g_zip_buf = nullptr;
     snappy_free_env(&g_snappy_env);
@@ -199,7 +201,8 @@ void OutQueue::stop() {
   while (!is_empty()) {
     WriteTask* task = pop();
     if (task->size_ > 0) {
-      _do_write(task->fd_, task->data_, task->size_);
+      _do_write(-1, task->data_, task->size_);
+//      _do_write(task->fd_, task->data_, task->size_);
     }
   }
 

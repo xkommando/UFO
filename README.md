@@ -1,82 +1,52 @@
 
-# Tracing
-##Set up 
+
+***tsan/rtl/ufo/doc/***
+
+***questions -> email:feedback2bowen@outlook.com***
 
 
-###1. Get LLVM 4.0.0 source code
-
-Download this project, unzip it, make sure the folder name is "lib", put it in the compiler-rt folder,
-your directory should look like this:  `$you_llvm$/projects/compiler-rt/lib`
-
-There are two files in folder `instrument`: `IRBuilder.h` and `ThreadSanitizer.cpp`.
-
-Goto `$you_llvm$/lib/Transforms/Instrumentation/`, and replace the original `ThreadSanitizer.cpp` with the one you found in folder `instrument`;
-Goto `include/llvm/IR`, and replace the original `IRBuilder.h` with the one in `instrument`.
 
 
-###2. Build project
-Build step is the same as building LLVM, see also http://clang.llvm.org/get_started.html
 
-Example:
-cd to you llvm folder
+_LOG:_
+================== 2017-9-19 ==================
+1. developed the new allocation mechanism:
+modified TSAN code so that application memory deallocations are deferred and a batch deallocation is performed at some trigger event (total number of memory exceeded the threshold).
+
+2. developed the new basic interfaces for trace event handling:
+removed the file I/O related code and add an interface to process the events in a global view. Now the runtime will trace application as usual, but when the total number of events exceeded the threshold, all thread local events are dropped.
+
+In a typical execution, Chromium ran for nearly 2 mins, 4 webpages (simple page, pages like gmail and youtube crashes my Chromium) were visited. In the background, 5 processes were created, and each performed some batch memory release (72 in total):
 ```
-cd workspace/llvm/llvm-3.8.1.src/
-mkdir build
-cd build/
-```
-Specify installation directory with parameter ```-DCMAKE_INSTALL_PREFIX=$install_dir$```
-
-Default build type is Debug. you can specify build type with parameter ```-DCMAKE_BUILD_TYPE=$type$```.
-Valid options for type are Debug, Release, RelWithDebInfo, and MinSizeRel.
-
-For a faster build, you can exclude test and examples, e.g.,
-```
-cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DLLVM_BUILD_TESTS=OFF -DLLVM_INCLUDE_TESTS=OFF -DLLVM_BUILD_EXAMPLES=OFF -DLLVM_INCLUDE_EXAMPLES=OFF -DLLVM_ENABLE_ASSERTIONS=OFF $your_llvm$
-make -j10
+>>>batch_dealloc proc(28675 0)#36  size:22968  num:230  total 47
+>>>batch_dealloc proc(28678 0)#0  size:7232766  num:4453  total 1
+>>>batch_dealloc proc(28737 1)#0  size:39692365  num:135684  total 11
+>>>batch_dealloc proc(28831 1)#0  size:42949755  num:85569  total 3
+>>>batch_dealloc proc(28820 1)#0  size:14295870  num:73451  total 10
 ```
 
 
-###3. Instrument code
-You can instrument C/C++ source or LLVM bitcode, the way to use UFO is similar with TSAN.
-Example:
-
-build & instrument code:
-
-```../$your_llvm_build$/bin/clang -fsanitize=thread -g -o0 -Wall test.c -o test.exe```
-Next you can load and exeucte the code to get traces.
+================== 2017-9-30 ==================
+1. developed the report functions, now it will report precise call stack as TSAN does
+2. integrated the report, new allocator and event buffer together
+3. created a demo function and tested it on sample c++ code.
 
 
-There are several environment variables you can set to config the tracing.
-List of UFO parameters:
+In folder "test_c", there is a sample cpp code, run it with poj179 yields:
+![Analyze output](https://github.tamu.edu/raw/bowen-cai/POJ179/master/__test_code/Screenshot%20from%202017-10-01%2019%3A03%3A16.png?token=AAAK3Vt6FC79enlEz3UlJXgzEWH2vGx4ks5Z2r41wA%3D%3D)
 
-1. **UFO_ON** (Boolean): set to __1__ to enable UFO tracing, or __0__ to disable UFO, UFO is disabled by default. This option is for benchmark.
-2. **UFO_TDIR** (String): the directory for your traces, by default it is ```./ufo_traces``` .
-3. **UFO_TL_BUF** (Number): buffer size for each thread, in MB. By default it is 128 (128MB).
-4. **UFO_COMPRESS** (Boolean): compress buffered trace events before flushing them to the hard drive, set to 0 to disable compression,
-or other number to enable it. Compression is enabled by default.
-5. **UFO_ASYNC_IO** (Boolean): use an output queue to write traces async. Async queue is enabled by default, set to 0 to disable it.
-6. **UFO_IO_Q** (Number): output queue length, by default it is 4.
-7. **UFO_NO_STACK** (Boolean): do not trace read/write on stack or thread local storage, value is 0 by default.
-8. **UFO_CALL** (Boolean): trace function call, disabled by default.
-9. **UFO_NO_VALUE** (Boolean): do not record read/write value, default setting is off.
-10. **UFO_STAT** (Boolean): print statistic data, by default is 1.
-Example:
-```
- $ UFO_ON=1 UFO_TDIR=my_dir/ufo_test_trace UFO_TL_BUF=512 UFO_COMPRESS=1 UFO_ASYNC_IO=1 UFO_IO_Q=6  ./test.exe 1 2 3
-```
-In this example, The runtime library will create a buffer of 512MB for each thread.
-When the thread local buffer is full, this buffer is pushed to a queue of length 6, and exchange for a new clean buffer.
-The output queue consumes 3584MB (512MB * 6 + 512MB) memory.
-Data in queue will be compressed the flushed it to files asynchronously.
+the complete output is in "alloc2_output.txt",
 
-For each process, UFO will create a folder to store the thread local traces within that process,
-the process id is appended to the folder name.
-Assuming the main process is "1234", and the main process forked another process "1235",
-UFO will create folder `ufo_test_trace_1234` for the main process, and `ufo_test_trace_1235` for the other process.
+Each heap memory access is preciese matched to the alloc event, regardless of any possible overlapping allocations.
+However there are some issues with multi-threaded programs, as the memory access matching in "test2()" is not successful.
 
+================== 2017-10-10 ==================
+* fixed bugs, tested on Chrome
 
-What if the program forks a multi-threaded process? By default this is not supported by TSAN.
+Sample output from Chrome:
+https://github.tamu.edu/bowen-cai/POJ179/blob/master/__test_code/sample_output_chrome.txt
 
-
-
+What's next:
+* Discuss with Gang and add more API for future analysis
+* make the tool more configurable (change hard coded parameters)
 

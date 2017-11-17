@@ -743,8 +743,7 @@ void FuncEntry(ThreadState *thr, uptr pc) {
 #endif
   thr->shadow_stack_pos[0] = pc;
   thr->shadow_stack_pos++;
-
-  bw::ufo::enter_func(thr, pc);
+//  bw::ufo::enter_func(thr, pc);
 }
 
 ALWAYS_INLINE USED
@@ -761,7 +760,7 @@ void FuncExit(ThreadState *thr) {
   DCHECK_LT(thr->shadow_stack_pos, thr->shadow_stack_end);
 #endif
   thr->shadow_stack_pos--;
-  bw::ufo::exit_func(thr);
+//  bw::ufo::exit_func(thr);
 }
 
 void ThreadIgnoreBegin(ThreadState *thr, uptr pc) {

@@ -1,7 +1,11 @@
 //
 // Created by xkommando on 11/1/16.
 //
-
+//
+//
+// The control center for UFO
+// (Bowen 2017-10-13)
+//
 #ifndef UFO_UFO_H
 #define UFO_UFO_H
 
@@ -37,7 +41,9 @@ using __sanitizer::atomic_store_relaxed;
 
 typedef void* (*FPAlloc)(__tsan::ThreadState *thr, uptr pc, void *addr, uptr size);
 typedef void (*FPDealloc)(__tsan::ThreadState *thr, uptr pc, void *addr);
+
 typedef void (*FPThr)(int tid_parent, int tid_kid, uptr pc);
+typedef void (*FPThrEnd)(__tsan::ThreadState *thr);
 typedef void (*FPThrStart)(__tsan::ThreadState *thr, uptr, uptr, uptr, uptr);
 
 typedef void (*FPMtxLock)(__tsan::ThreadState *thr, uptr pc, u64 mutex_id);
@@ -55,13 +61,12 @@ typedef void (*FPPtrDeRef)(__tsan::ThreadState *thr, uptr pc, uptr addr_src);
 class UFOContext {
   static s64 get_int_opt(const char *name, s64 default_val);
   void read_config();
-  void open_trace_dir();
+//  void open_trace_dir();
   bool do_print_stat_;
-  // state
-  u32 cur_pid_;
-  u32 p_pid_;
-  bool is_subproc;
+
+  //deprecated
   u32 mudule_length_;
+
   atomic_uint32_t tl_buf_size_;
   // track all buffer allocation
   // resize tl buffer size dynamically
@@ -72,21 +77,34 @@ class UFOContext {
   u16 ratio_mem_x4;
   u64 total_mem_;
 public:
+  // state
+  u32 cur_pid_;
+  u32 p_pid_;
+  bool is_subproc;
+
   // config
-  bool is_on;
+  volatile bool is_on;
   atomic_uint32_t stack_size;
   bool no_stack;
   bool no_data_value;// do not record the value of the read/write
   bool trace_func_call;
   bool trace_ptr_prop;
 
-  char trace_dir[DIR_MAX_LEN];
+//  char trace_dir[DIR_MAX_LEN];
   u64 time_started;
 
-  TLBuffer *tlbufs;
+
+  __sanitizer::SpinMutex tlbuf_lock;
+  TLBuffer* volatile tlbufs;
+  volatile u32 ana_count;// ana count, for debug
+
   // logical time for mem_acc(r/w, range r/w), lock, alloc/dealloc
   // these 5 type of events are synced,
-  volatile u64 e_count;
+  volatile u64 sync_seq;
+
+  u64 max_mem_hold;
+  volatile u64 mem_hold;
+  volatile u32 batchr_count;// batch release count, for debug
 
   ALWAYS_INLINE
   u32 get_buf_size() const {
@@ -95,13 +113,13 @@ public:
 
   bool use_io_q;
   bool use_compression;
-  int out_queue_legth;
+  int out_queue_length;
 
   TLStatistic *stat;
 
   OutQueue *out_queue;
 
-  void save_module_info();
+//  void save_module_info();
   void output_stat();
 public:
 
@@ -115,9 +133,8 @@ public:
   void child_after_fork();
 
   // race condition on tl_buf_size_, but it does not matter.
-  void mem_acquired(u32 n_bytes);
-  void mem_released(u32 n_bytes);
-
+//  void mem_acquired(u32 n_bytes);
+//  void mem_released(u32 n_bytes);
   static u64 get_time_ms();
 
 
@@ -130,6 +147,7 @@ public:
   static FPThr            fn_thread_created;
   static FPThrStart       fn_thread_started;
   static FPThr            fn_thread_join;
+  static FPThrEnd         fn_thread_end;
 
   static FPMtxLock        fn_mtx_lock;
   static FPMtxLock        fn_mtx_unlock;

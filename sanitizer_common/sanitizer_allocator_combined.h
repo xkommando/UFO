@@ -52,10 +52,18 @@ class CombinedAllocator {
       size = RoundUpTo(size, alignment);
     void *res;
     bool from_primary = primary_.CanAllocate(size, alignment);
-    if (from_primary)
+    //////////////  UUUUUUUUUUUUUFFFFFFFFFFFFFFFFFFFOOOOOOOOOOOOOOOOO
+    if (from_primary) {
+//      Printf(">>>from_primary");
       res = cache->Allocate(&primary_, primary_.ClassID(size));
-    else
+    } else
       res = secondary_.Allocate(&stats_, size, alignment);
+//    PrintStats();
+//    if (from_primary)
+//      res = cache->Allocate(&primary_, primary_.ClassID(size));
+//    else
+//      res = secondary_.Allocate(&stats_, size, alignment);
+    //////////////  UUUUUUUUUUUUUFFFFFFFFFFFFFFFFFFFOOOOOOOOOOOOOOOOO
     if (alignment > 8)
       CHECK_EQ(reinterpret_cast<uptr>(res) & (alignment - 1), 0);
     if (cleared && res && from_primary)
@@ -98,6 +106,10 @@ class CombinedAllocator {
       cache->Deallocate(&primary_, primary_.GetSizeClass(p), p);
     else
       secondary_.Deallocate(&stats_, p);
+
+    //////////////  UUUUUUUUUUUUUFFFFFFFFFFFFFFFFFFFOOOOOOOOOOOOOOOOO
+//    PrintStats();
+    //////////////  UUUUUUUUUUUUUFFFFFFFFFFFFFFFFFFFOOOOOOOOOOOOOOOOO
   }
 
   void *Reallocate(AllocatorCache *cache, void *p, uptr new_size,

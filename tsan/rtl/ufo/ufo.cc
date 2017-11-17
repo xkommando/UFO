@@ -9,7 +9,6 @@
 #include <sys/time.h>
 
 #include "../../../sanitizer_common/sanitizer_common.h"
-//#include "../../../sanitizer_common/sanitizer_symbolizer.h"
 #include <stdio.h>
 
 #include "../../../sanitizer_common/sanitizer_posix.h"
@@ -26,8 +25,11 @@
 #include "dummy_rtl.h"
 #include "rtl_impl.h"
 
+#include "__test_ana.h"
+
 namespace bw {
 namespace ufo {
+
 
 //static
 u64 UFOContext::get_time_ms() {
@@ -59,6 +61,7 @@ FPDealloc UFOContext::fn_dealloc = &nop_dealloc;
 FPThr UFOContext::fn_thread_created = &nop_thread_created;
 FPThrStart UFOContext::fn_thread_started = &nop_thread_start;
 FPThr UFOContext::fn_thread_join = &nop_thread_join;
+FPThrEnd UFOContext::fn_thread_end = &nop_thread_end;
 
 FPMtxLock UFOContext::fn_mtx_lock = &nop_mtx_lock;
 FPMtxLock UFOContext::fn_mtx_unlock = &nop_mtx_unlock;
@@ -101,6 +104,7 @@ void UFOContext::start_trace() {
   fn_thread_created = &impl_thread_created;
   fn_thread_started = &impl_thread_started;
   fn_thread_join = &impl_thread_join;
+  fn_thread_end = &impl_thread_end;
 
   fn_mtx_lock = &impl_mtx_lock;
   fn_mtx_unlock = &impl_mtx_unlock;
@@ -112,7 +116,7 @@ void UFOContext::start_trace() {
   fn_cond_signal = &impl_cond_signal;
   fn_cond_bc = &impl_cond_broadcast;
 
-  s64 set_no_stack = get_int_opt(ENV_NO_STACK_ACC, NO_STACK_ACC);
+  s64 set_no_stack = get_int_opt(ENV_NO_STACK_ACC, 0);
   s64 set_no_value = get_int_opt(ENV_NO_VALUE, 0);
 
   if (this->trace_func_call) {
@@ -151,6 +155,7 @@ void UFOContext::stop_trace() {
   fn_thread_created = &nop_thread_created;
   fn_thread_started = &nop_thread_start;
   fn_thread_join = &nop_thread_join;
+  fn_thread_end = &nop_thread_end;
 
   fn_mtx_lock = &nop_mtx_lock;
   fn_mtx_unlock = &nop_mtx_unlock;
@@ -174,9 +179,9 @@ void UFOContext::read_config() {
   this->tl_buf_size_ = {0};
   this->use_compression = 0;
   this->use_io_q = 0;
-  this->out_queue_legth = -1;
+  this->out_queue_length = -1;
 
-  this->do_print_stat_ = get_int_opt(ENV_PRINT_STAT, 1);
+  this->do_print_stat_ = get_int_opt(ENV_PRINT_STAT, 0);
 
   // buffer size
   u64 bufsz = (u64)get_int_opt(ENV_TL_BUF_SIZE, DEFAULT_BUF_PRE_THR);
@@ -185,29 +190,13 @@ void UFOContext::read_config() {
     u32 sz = bufsz * 1024 * 1024;
     atomic_store_relaxed(&this->tl_buf_size_, sz);
   } else {
-    Printf("!!! Could not read thread local buffer size or size illegal:  %ld\r\n", bufsz);
+    Printf("!!! Could not read thread local buffer size or size is illegal:  %ld\r\n", bufsz);
     Die();
   }
 
-  bufsz = get_int_opt(ENV_UFO_MEM_T1, DEFAULT_MEM_THRESHOLD_1);
-  if (0 < bufsz && bufsz < DEFAULT_MEM_THRESHOLD_1 * 100)
-    this->mem_t1_ = bufsz * 1024 * 1024;
-  else {
-    Printf("!!! Invalid level 1 memory threshold: %uMB, reset to default: %uMB.\r\n"
-        , bufsz, DEFAULT_MEM_THRESHOLD_1);
-    this->mem_t1_ = DEFAULT_MEM_THRESHOLD_1 * 1024 * 1024;
-  }
-  bufsz = get_int_opt(ENV_UFO_MEM_T2, DEFAULT_MEM_THRESHOLD_2);
-  if (mem_t1_ < (bufsz * 1024 * 1024) && bufsz < DEFAULT_MEM_THRESHOLD_2 * 100)
-    this->mem_t2_ = bufsz * 1024 * 1024;
-  else {
-    this->mem_t2_ = mem_t1_ * 3 / 2;
-    Printf("!!! Invalid level 2 memory threshold: %uMB, reset to 1.5 * level1 (%u MB).\r\n"
-        , bufsz, mem_t2_ / 1024 / 1024);
-  }
-
-  ratio_mem_x2 = 0;
-  ratio_mem_x4 = 0;
+  bufsz = (u64)get_int_opt(ENV_MAX_MEM_HOLD, DEFAULT_HOLD_MEM_SIZE);
+  bufsz *= 1024 * 1024;
+  this->max_mem_hold = bufsz;
 
   // use snappy compression
   s64 use_comp = get_int_opt(ENV_USE_COMPRESS, COMPRESS_ON);
@@ -220,7 +209,7 @@ void UFOContext::read_config() {
     // queue size
     s64 io_q_sz = get_int_opt(ENV_IO_Q_SIZE, DEFAULT_IO_Q_SIZE);
     if (0 < io_q_sz && io_q_sz < 1024) {
-      this->out_queue_legth = io_q_sz;
+      this->out_queue_length = io_q_sz;
     } else {
       Printf("!!! Could not read out queue length or length is illegal:  %d\r\n", io_q_sz);
       Die();
@@ -230,62 +219,7 @@ void UFOContext::read_config() {
   s64 do_trace_call = get_int_opt(ENV_TRACE_FUNC, 0);
   this->trace_func_call = do_trace_call;
 
-  s64 do_trace_ptr_prop = get_int_opt(ENV_PTR_PROP, 0);
-  this->trace_ptr_prop = do_trace_ptr_prop;
-
-  // trace dir
-  __sanitizer::internal_memset(trace_dir, '\0', DIR_MAX_LEN);
-  const char *env_dir = __sanitizer::GetEnv(ENV_TRACE_DIR);
-  u64 dir_len;
-  if (env_dir == nullptr
-      || (dir_len = internal_strnlen(env_dir, DIR_MAX_LEN)) < 1) {
-    internal_strncpy(trace_dir, DEFAULT_TRACE_DIR, 100);
-  } else {
-    internal_strncpy(trace_dir, env_dir, DIR_MAX_LEN - 45);
-  }
-  // append '_' to dir name
-  dir_len = internal_strnlen(trace_dir, DIR_MAX_LEN - 1);
-  if (0 < dir_len && dir_len < DIR_MAX_LEN - 45) {
-    if (trace_dir[dir_len - 1] == '/') {
-      trace_dir[dir_len - 1] = '_';
-    } else {
-      trace_dir[dir_len] = '_';
-      trace_dir[dir_len + 1] = '\0';
-      dir_len++;
-    }
-  }
-  // append process id to the dir name
-//  pre_len += __sanitizer::internal_snprintf(file_name + pre_len, name_len, "%d", tid);
-  char str_pid[50];
-  __sanitizer::internal_memset(str_pid, '\0', 50);
-  __sanitizer::internal_snprintf(str_pid, 45, "%u", this->cur_pid_);
-  __sanitizer::internal_strncat(trace_dir, str_pid, 45);
-
-}
-
-void UFOContext::open_trace_dir() {
-  // open or create
-  struct stat _st = {0};
-  __sanitizer::internal_stat(trace_dir, &_st);
-  if (!S_ISDIR(_st.st_mode)) {
-    if (0 != mkdir(trace_dir, 0700)) {
-      fprintf(stderr, "UFO>>> Could not create directory for trace files '%s': ", trace_dir);
-      perror("");
-      Die();
-    }
-  } else {
-    // These are data types defined in the "dirent" header
-    DIR *folder = opendir(trace_dir);
-    struct dirent *next_file;
-    char filepath[320];
-
-    while ((next_file = readdir(folder)) != nullptr) {
-      // build the path for each file in the folder
-      sprintf(filepath, "%s/%s", trace_dir, next_file->d_name);
-      remove(filepath);
-    }
-    closedir(folder);
-  }
+  this->trace_ptr_prop = false;
 }
 
 void UFOContext::print_config() {
@@ -301,39 +235,29 @@ void UFOContext::print_config() {
   } else {
     Printf("record value; ");
   }
-  if (this->trace_func_call) {
-    Printf("trace func call; ");
-  } else Printf("do not trace func call; ");
 
-  if (this->trace_ptr_prop) {
-    Printf("trace ptr prop; ");
-  } else Printf("do not trace ptr prop; ");
-
-
-#ifdef STAT_ON
+  #ifdef STAT_ON
   Printf("statistic set on; ");
 #endif
-  u32 sz = get_buf_size();
-  Printf("initial per thread buffer size:%u (%u MB), ", sz, (sz / 1024 / 1024));
-//  Printf("level 1 memory threshold:%uMB, level 2: %uMB; ", mem_t1_ / 1024 / 1024, mem_t2_ / 1024 / 1024);
-
+  if (this->do_print_stat_) {
+    Printf("print stat; ");
+  } else {
+    Printf("do not print stat; ");
+  }
   if (this->use_compression) {
     Printf("compress buffer; ");
   } else {
     Printf("do not compress; ");
   }
   if (this->use_io_q) {
-    Printf("async IO queue enabled, length: %d; ", out_queue_legth);
+    Printf("async IO queue enabled, length: %d; ", out_queue_length);
   } else {
     Printf("async IO queue disabled; ");
   }
-  if (this->do_print_stat_) {
-    Printf("print stat; ");
-  } else {
-    Printf("do not print stat; ");
-  }
 
-  Printf("trace dir is '%s'.\r\n", this->trace_dir);
+  u32 sz = get_buf_size();
+  Printf("initial per thread buffer size:%u (%u MB), ", sz, (sz / 1024 / 1024));
+  Printf("max mem in hold: %d MB", (this->max_mem_hold / 1024 / 1024));
 }
 
 void UFOContext::init_start() {
@@ -342,7 +266,10 @@ void UFOContext::init_start() {
   this->p_pid_ = (u32)__sanitizer::internal_getppid();
   this->is_subproc = false;
   this->mudule_length_ = 0;
-  this->e_count = 0;
+  this->sync_seq = 0;
+
+  this->batchr_count = 0;
+  this->mem_hold = 0;
 
   s64 set_on = get_int_opt(ENV_UFO_ON, 0);
   this->is_on = (set_on != 0);
@@ -372,23 +299,22 @@ void UFOContext::init_start() {
     tlbufs[i].init();
   }
   G_BUF_BASE = tlbufs;
+  this->ana_count = 0;
 
   // step 3: prepare async io queue
   if (use_io_q) {
     this->out_queue = (OutQueue *) __tsan::internal_alloc(__tsan::MBlockScopedBuf, sizeof(OutQueue));
-    out_queue->start(this->out_queue_legth);
+    out_queue->start(this->out_queue_length);
   }
 
   // step 4: create trace dir
-  open_trace_dir();
+//  open_trace_dir();
   // step 5: save loaded module info
-  save_module_info();
+//  save_module_info();
 
   // step create buffer for main thread
-#ifdef BUF_EVENT_ON
   tlbufs[0].open_buf();
-#endif
-  tlbufs[0].open_file(0);
+  tlbufs[0].thr = cur_thread();
 
   { // put ThreadStarted event to main thread trace
     uptr stk_addr;
@@ -404,20 +330,30 @@ void UFOContext::init_start() {
     be.stk_size = (u32) stk_size;
     be.tls_addr = (u64) tls_addr;
     be.tls_size = (u32) tls_size;
-
     tlbufs[0].put_event(be);
+
+    tlbufs[0].tls_height = (u32)tls_size;
+    tlbufs[0].tls_bottom = (u64)tls_addr;// lower address
+    tlbufs[0].stack_height = (u32)stk_size;
+    tlbufs[0].stack_bottom = (u64)stk_addr;// lower address
   }
   this->start_trace();
 }
 
+
 void UFOContext::destroy() {
   stop_trace();
 
+//  __demo_detect();
+
 #ifdef STAT_ON
-  if (this->do_print_stat_ && this->is_on) {
-    output_stat();
+  if (stat != nullptr) {
+    if (this->do_print_stat_ && this->is_on) {
+      output_stat();
+    }
+    __tsan::internal_free(stat);
   }
-  __tsan::internal_free(stat);
+  stat = nullptr;
 #endif
   stat = nullptr;
 
@@ -429,72 +365,39 @@ void UFOContext::destroy() {
     out_queue->stop();
     __tsan::internal_free(out_queue);
   }
-  // then flush remaining buffer & close file
-  for (u32 i = 0; i < MAX_THREAD; ++i) {
-    tlbufs[i].finish();
-  }
 
-  __tsan::internal_free(tlbufs);
-  tlbufs = nullptr;
+  __finish_remaining();
+    // then flush remaining buffer & close file
+//    for (u32 i = 0; i < MAX_THREAD; ++i) {
+//      tlbufs[i].finish();
+//    }
+//
+//    __tsan::internal_free(tlbufs);
+//    tlbufs = nullptr;
+
 
   // save module info if new modules have been loaded
-  save_module_info();
-}
-
-
-void UFOContext::save_module_info() {
-
-  __sanitizer::ListOfModules modules;
-  modules.init();
-//  const __sanitizer::ListOfModules& modules = __sanitizer::Symbolizer::GetOrInit()->modules_;
-  const u32 cur_len = (u32)modules.size();
-  DPrintf("UFO>>>#%d CHECK  loaded %d modules\r\n", this->cur_pid_, modules.size());
-
-  if (this->mudule_length_ == cur_len)
-    return;
-
-  Printf("UFO>>>Proc %d: Saving info of %d modules\r\n", this->cur_pid_, cur_len);
-
-  char path[DIR_MAX_LEN];
-  internal_strncpy(path, trace_dir, 200);
-  internal_strncat(path, NAME_MODULE_INFO, 50);
-
-  FILE *cfp = fopen(path, "w+");
-  for (const auto &module : modules) {
-//      fprintf(fp, "%s %s %s %d", "We", "are", "in", 2012);
-    fprintf(cfp, "%s|", module.full_name());
-    uptr base = module.base_address();
-    fprintf(cfp, "%llx|", base);
-    for (const auto &range : module.ranges()) {
-//      if (range.executable) {
-      uptr start = range.beg;
-      uptr end = range.end;
-      fprintf(cfp, "%d|%llx|%llx|", range.executable, start, end);
-//      }
-    }
-    fprintf(cfp, "\r\n");
-  }
-  fclose(cfp);
-  this->mudule_length_ = cur_len;
+//  save_module_info();
 }
 
 
 void UFOContext::output_stat() {
-  char path[DIR_MAX_LEN];
-
-  internal_strncpy(path, this->trace_dir, 200);
-  internal_strncat(path, NAME_STAT_FILE, 50);
-  FILE *f_pp = fopen(path, "w+");
-  summary_stat(f_pp, this->stat, MAX_THREAD, cur_pid_, p_pid_);
-  fclose(f_pp);
-
-  internal_memset(path, '\0', DIR_MAX_LEN);
-
-  internal_strncpy(path, trace_dir, 200);
-  internal_strncat(path, NAME_STAT_CSV, 50);
-  FILE* f_csv = fopen(path, "w+");
-  print_csv(f_csv, this->stat, MAX_THREAD, cur_pid_, p_pid_);
-  fclose(f_csv);
+//  char path[DIR_MAX_LEN];
+//
+//  internal_strncpy(path, this->trace_dir, 200);
+//  internal_strncat(path, NAME_STAT_FILE, 50);
+//  FILE *f_pp = fopen(path, "w+");
+//  summary_stat(f_pp, this->stat, MAX_THREAD, cur_pid_, p_pid_);
+  summary_stat(nullptr, this->stat, MAX_THREAD, cur_pid_, p_pid_);
+//  fclose(f_pp);
+//
+//  internal_memset(path, '\0', DIR_MAX_LEN);
+//
+//  internal_strncpy(path, trace_dir, 200);
+//  internal_strncat(path, NAME_STAT_CSV, 50);
+//  FILE* f_csv = fopen(path, "w+");
+//  print_csv(f_csv, this->stat, MAX_THREAD, cur_pid_, p_pid_);
+//  fclose(f_csv);
 }
 
 /**
@@ -527,14 +430,14 @@ void UFOContext::child_after_fork() {
   read_config();
   time_started = get_time_ms();
   print_config();
-  open_trace_dir();
-  save_module_info();
+//  open_trace_dir();
+//  save_module_info();
 
   if (use_io_q) {
     this->out_queue->release_mem();
     __tsan::internal_free(out_queue);
     this->out_queue = (OutQueue *) __tsan::internal_alloc(__tsan::MBlockScopedBuf, sizeof(OutQueue));
-    out_queue->start(this->out_queue_legth);
+    out_queue->start(this->out_queue_length);
   }
 
   for (u32 i = 0; i < MAX_THREAD; ++i) {
@@ -548,7 +451,7 @@ void UFOContext::child_after_fork() {
   this->start_trace();
 }
 
-void UFOContext::mem_acquired(u32 n_bytes) {
+//void UFOContext::mem_acquired(u32 n_bytes) {
 //  this->lock.Lock();
 //  this->total_mem_ += n_bytes;
 //  if (total_mem_ >= this->mem_t2_) {
@@ -575,9 +478,9 @@ void UFOContext::mem_acquired(u32 n_bytes) {
 //    ratio_mem_x2 += 1;
 //  }
 //  lock.Unlock();
-}
+//}
 
-void UFOContext::mem_released(u32 n_bytes) {
+//void UFOContext::mem_released(u32 n_bytes) {
 //  lock.Lock();
 //  this->total_mem_ += n_bytes;
 //
@@ -599,7 +502,7 @@ void UFOContext::mem_released(u32 n_bytes) {
 //    Printf(">>>>>>>>>> tl buf X2\r\n");
 //  }
 //  lock.Unlock();
-}
+//}
 
 }
 }

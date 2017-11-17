@@ -1,19 +1,21 @@
 
 
-instrument:
-write -> insert after
 
+instrument:
+write : insert before -> after
+
+TSAN:
 tsan_interface.cc  __tsan_init  after tsan init, init ufo
 tsan_rtl.cc  727 751  func in, func out
 
 sanitizer_internal_defs.h               : undefine SANITIZER_DEBUG, disable CHECK by setting cond to false
 
-sanitizer_flags.h                       : disable interceptors for *print*, and some str*
+sanitizer_flags.h                       : disable interceptors for *print*, and some str* and ...
 
 lib/tsan/CMakeLists.txt 				: exclude asan ...
-tsan_new_delete.cc                      : 2  pc -> caller_pc
-tsan/rtl/tsan_defs.h  					:no hitory
-tsan/rtl/tsan_flags.inc 		 		:no report
+tsan_new_delete.cc                      : 2 change pc -> caller_pc
+tsan/rtl/tsan_defs.h  					: disable hitory
+tsan/rtl/tsan_flags.inc 		 		: disable report
 tsan/rtl/tsan_interceptors.cc 		 	: pc -> caller_pc
 tsan/rtl/tsan_interface.cc 		 		: ufo init
 tsan/rtl/tsan_mman.cc 		 			: ufo on alloc dealloc
@@ -28,21 +30,32 @@ tsan/rtl/tsan_rtl.cc 			 		: MemoryAccessImpl1 -> del // not called
                                                                             used after allocation, called by interceptors mainly
                                                  MemoryRangeSet -> del // not called
 
-tsan/rtl/tsan_rtl_mutex.cc 				        : skip read atomic; ufo lock unlock; remove atomic read write
+tsan/rtl/tsan_rtl_mutex.cc 				        : skip read atomic; ufo on lock unlock; remove atomic read write
 
 tsan/rtl/tsan_rtl_thread.cc OnCreated ln 56		: ufo on fork join  MemoryAccessRange
 
 
-tsan/rtl/tsan_interceptors.cc:  1046 cond wait signal broadcast
+tsan/rtl/tsan_interceptors.cc:  1046 cond wait signal broadcast; change a lot of PC
 
-remove func in out {
+remove func in out in {
 tsan_interface_ann.cc 37 ScopedAnnotation
 tsan_interface_java.cc Scoped*
 tsan_interface_atomic.cc 855 Scoped*  also in macro
 
-
 tsan/rtl/tsan_interceptors.cc 264 ScopedInterceptor
 }
+
+thr shadow stack:
+  // Setup dynamic shadow stack.
+  const int kInitStackSize = 8 -> 64
+
+tsan defs
+  kShadowStackSize = 64 * 1024; -> 64 * 2048
+   Trace {
+    uptr shadow_stack[kShadowStackSize];
+
+
+
 -----------------------------------------------------------------------------------------------------------------
 
 creating thread:
@@ -54,7 +67,12 @@ tsan/rtl/tsan_interceptors.cc:936:   TSAN_INTERCEPTOR(int, pthread_create,      
 >>>> main thread call stack:
 
 tsan/rtl/tsan_rtl_thread.cc-233-int ThreadCreate                                         CreateThread
-sanitizer_common/sanitizer_thread_registry.cc:152: ThreadRegistry::CreateThread          tctx->SetCreated
+
+sanitizer_common/sanitizer_thread_registry.cc:152: ThreadRegistry::CreateThread          tctx->SetCreated,
+                                    also set tid, save thr ctx to registry
+
+
+
 sanitizer_common/sanitizer_thread_registry.cc-68-void ThreadContextBase::SetCreated      OnCreated(arg);
 tsan/rtl/tsan_rtl_thread.cc:56:void ThreadContext::OnCreated(void *arg)
 
@@ -71,6 +89,21 @@ tsan_rtl.cc 70
 static ThreadContextBase *CreateThreadContext(u32 tid)
 sanitizer_thread_registry StartThread
 
+
+join thread:
+
+in main thr:
+pthread_join
+-> rtl thread  ThreadJoin
+  ->  ThreadRegistry::JoinThread(u32 tid, void *arg) {
+      -> OnJoined
+
+in  kid
+thread_finalize
+  DestroyThreadState
+  ThreadFinish
+  ThreadRegistry FinishThread
+
 -----------------------------------------------------------------------------------------------------------------
 steps to add new event:
 
@@ -82,23 +115,15 @@ define function pointer type in ufo.h
 add function pointer in ufo.h
 
 implement dummy (safe) function
-implement function
+implement real function
 
 init func pointer in ufo.h with dummy
+
 assign dummy to func pointer in UFOContext::stop_trace ...
 assign func impl in UFOContext::start_trace
 
-additional:
+optional:
 modify stat and add counters
 
 -----------------------------------------------------------------------------------------------------------------
-
-
-
-to do:
-store thread local storage, thread stack address range
-??? remove some lib
-remove some interceptors
-#remove tsan call stack tracing
-sanitizer_platform_interceptors.h
-opt allocator
+print -> VSNPrintf

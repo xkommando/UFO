@@ -23,7 +23,7 @@ namespace __tsan {
 
 template<typename T>
 class Vector {
- public:
+public:
   explicit Vector(MBlockType typ)
       : typ_(typ)
       , begin_()
@@ -35,6 +35,27 @@ class Vector {
     if (begin_)
       internal_free(begin_);
   }
+
+  typedef     T     value_type;
+  typedef     T*    iterator;
+  typedef const T*  const_iterator;
+
+  explicit Vector(int init_size)
+      : Vector(MBlockScopedBuf, init_size) {}
+
+  explicit Vector(MBlockType typ, int init_size)
+      : typ_(typ) {
+    begin_ = (T*)internal_alloc(typ_, init_size * sizeof(T));
+    end_ = begin_;
+    last_ = begin_ + init_size;
+  }
+
+  void PrintMe() const {
+    for (T* cur = begin_; cur != end_; ++cur) {
+      Printf("%d\r\n", *cur);
+    }
+  }
+
 
   void Reset() {
     if (begin_)
@@ -90,7 +111,7 @@ class Vector {
     }
   }
 
- private:
+private:
   const MBlockType typ_;
   T *begin_;
   T *end_;

@@ -215,13 +215,13 @@ void NORETURN CheckFailed(const char *file, int line, const char *cond,
 
 #define RAW_CHECK(expr) RAW_CHECK_MSG(expr, #expr)
 
-/*
+/* DO NOT USE THIS MACRO!!!, time wasted so far 4 hours
 #define CHECK_IMPL(c1, op, c2) \
       (void*)0
 */
 
 //if (UNLIKELY(!(v1 op v2)))
-
+///*
 #define CHECK_IMPL(c1, op, c2) \
   do { \
     __sanitizer::u64 v1 = (u64)(c1); \
@@ -230,7 +230,7 @@ void NORETURN CheckFailed(const char *file, int line, const char *cond,
       __sanitizer::CheckFailed(__FILE__, __LINE__, \
         "(" #c1 ") " #op " (" #c2 ")", v1, v2); \
   } while (false) \
-/**/
+//*/
 
 #define CHECK(a)       CHECK_IMPL((a), !=, 0)
 #define CHECK_EQ(a, b) CHECK_IMPL((a), ==, (b))

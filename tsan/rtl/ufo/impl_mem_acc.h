@@ -1,6 +1,10 @@
 //
 // Created by cbw on 11/18/16.
 //
+// actual implementation for memory access event
+// see UFOContext::start_tracing() stop_tracing()
+// (Bowen 2017-10-13)
+//
 
 #ifndef UFO_RTL_IMPL_H
 #error "error: must be included by rtl_impl.h"
@@ -21,17 +25,20 @@ if (is_write) {\
 
 #endif
 
+
 __HOT_CODE
 void impl_mem_acc(ThreadState *thr, uptr pc, uptr addr, int kAccessSizeLog, bool is_write) {
   if (is_write) {
-    DPrintf("UFO>>> #%d write %d bytes to %llu  val:%llu   pc:%p\r\n",
+    DPrintf("UFO>>> #%d write %d bytes to %p  val:%llu   pc:%p\r\n",
             thr->tid, (1 << kAccessSizeLog), addr, __read_addr(addr, kAccessSizeLog), pc);
   } else {
-    DPrintf("UFO>>> #%d read %d bytes from %llu val:%llu   pc:%p\r\n",
+    DPrintf("UFO>>> #%d read %d bytes from %p val:%llu   pc:%p\r\n",
             thr->tid, (1 << kAccessSizeLog), addr, __read_addr(addr, kAccessSizeLog), pc);
   }
   int tid = thr->tid;
   __MC_STAT
+
+  u64 _idx = __sync_add_and_fetch(&uctx->sync_seq, 1);
 
   u8 type_idx = EventType::MemRead;
   if (is_write) {
@@ -40,40 +47,27 @@ void impl_mem_acc(ThreadState *thr, uptr pc, uptr addr, int kAccessSizeLog, bool
 
   u8 sz = static_cast<u8>(kAccessSizeLog);
   type_idx |= sz << 6;
-  u64 _idx = __sync_add_and_fetch(&uctx->e_count, 1);
 
-#ifndef BUF_EVENT_ON
-  int fd = uctx->tlbufs[tid].trace_fd_;
-  MemAccEvent _e(type_idx, _idx, (u64)addr, (u64)pc);
-  internal_write(fd, &_e, sizeof(MemAccEvent));
-  const int acc_len = 1 << kAccessSizeLog;
-  internal_write(fd, addr, acc_len)
-#else
   auto &buf = uctx->tlbufs[tid];
   const int acc_len = 1 << kAccessSizeLog;
-//  if (UNLIKELY(buf.buf_ == nullptr)) {
-//    buf.open_buf();
-//    buf.open_file(tid);
-//  } else if (UNLIKELY(buf.size_ + sizeof(MemAccEvent) + acc_len >= buf.capacity_)) {
-//    buf.flush();
-//  }
-  buf.put_event(MemAccEvent(type_idx, _idx, (u64)addr, (u64)pc));
+
+  buf.put_event(MemAccEvent(type_idx, _idx, (u64) addr, (u64) pc));
   Byte *ptr = (Byte *) addr;
   for (int i = 0; i < acc_len; ++i) {
     *(buf.buf_ + buf.size_ + i) = *(ptr + i);
   }
   buf.size_ += acc_len;
-#endif
+
 }
 
 // no value
 __HOT_CODE
 void impl_mem_acc_nv(ThreadState *thr, uptr pc, uptr addr, int kAccessSizeLog, bool is_write) {
   if (is_write) {
-    DPrintf("UFO>>> #%d write %d bytes to %llu  val:%llu   pc:%p\r\n",
+    DPrintf("UFO>>> #%d write %d bytes to %p  val:%llu   pc:%p\r\n",
             thr->tid, (1 << kAccessSizeLog), addr, __read_addr(addr, kAccessSizeLog), pc);
   } else {
-    DPrintf("UFO>>> #%d read %d bytes from %llu val:%llu   pc:%p\r\n",
+    DPrintf("UFO>>> #%d read %d bytes from %p val:%llu   pc:%p\r\n",
             thr->tid, (1 << kAccessSizeLog), addr, __read_addr(addr, kAccessSizeLog), pc);
   }
 
@@ -87,24 +81,13 @@ void impl_mem_acc_nv(ThreadState *thr, uptr pc, uptr addr, int kAccessSizeLog, b
 
   u8 sz = static_cast<u8>(kAccessSizeLog);
   type_idx |= sz << 6;
-  u64 _idx = __sync_add_and_fetch(&uctx->e_count, 1);
+  u64 _idx = __sync_add_and_fetch(&uctx->sync_seq, 1);
 
-#ifndef BUF_EVENT_ON
-  int fd = uctx->tlbufs[tid].trace_fd_;
-  MemAccEvent _e(type_idx, _idx, (u64)addr, (u64)pc);
-  internal_write(fd, &_e, sizeof(MemAccEvent));
-  return;
-#else
+
   auto &buf = uctx->tlbufs[tid];
-//  if (UNLIKELY(buf.buf_ == nullptr)) {
-//    buf.open_buf();
-//    buf.open_file(tid);
-//  } else if (UNLIKELY(buf.size_ + sizeof(MemAccEvent) >= buf.capacity_)) {
-//    buf.flush();
-//  }
-  buf.put_event(MemAccEvent(type_idx, _idx, (u64)addr, (u64)pc));
+
+  buf.put_event(MemAccEvent(type_idx, _idx, (u64) addr, (u64) pc));
   return;
-#endif
 }
 
 // skip stack acc
@@ -127,10 +110,10 @@ void ns_mem_acc(ThreadState *thr, uptr pc, uptr addr, int kAccessSizeLog, bool i
   }
 
   if (is_write) {
-    DPrintf("UFO>>> #%d write %d bytes to %llu  val:%u   pc:%p\r\n",
+    DPrintf("UFO>>> #%d write %d bytes to %p  val:%u   pc:%p\r\n",
             thr->tid, (1 << kAccessSizeLog), addr, __read_addr(addr, kAccessSizeLog), pc);
   } else {
-    DPrintf("UFO>>> #%d read %d bytes from %llu val:%u   pc:%p\r\n",
+    DPrintf("UFO>>> #%d read %d bytes from %p val:%u   pc:%p\r\n",
             thr->tid, (1 << kAccessSizeLog), addr, __read_addr(addr, kAccessSizeLog), pc);
   }
 
@@ -141,29 +124,16 @@ void ns_mem_acc(ThreadState *thr, uptr pc, uptr addr, int kAccessSizeLog, bool i
 
   u8 sz = static_cast<u8>(kAccessSizeLog);
   type_idx |= sz << 6;
-  u64 _idx = __sync_add_and_fetch(&uctx->e_count, 1);
+  u64 _idx = __sync_add_and_fetch(&uctx->sync_seq, 1);
 
-#ifndef BUF_EVENT_ON
-  int fd = uctx->tlbufs[tid].trace_fd_;
-  MemAccEvent _e(type_idx, _idx, (u64)addr, (u64)pc);
-  internal_write(fd, &_e, sizeof(MemAccEvent));
   const int acc_len = 1 << kAccessSizeLog;
-  internal_write(fd, addr, acc_len);
-#else
-  const int acc_len = 1 << kAccessSizeLog;
-//  if (UNLIKELY(buf.buf_ == nullptr)) {
-//    buf.open_buf();
-//    buf.open_file(tid);
-//  } else if (UNLIKELY(buf.size_ + sizeof(MemAccEvent) + acc_len >= buf.capacity_)) {
-//    buf.flush();
-//  }
-  buf.put_event(MemAccEvent(type_idx, _idx, (u64)addr, (u64)pc));
+
+  buf.put_event(MemAccEvent(type_idx, _idx, (u64) addr, (u64) pc));
   Byte *ptr = (Byte *) addr;
   for (int i = 0; i < acc_len; ++i) {
     *(buf.buf_ + buf.size_ + i) = *(ptr + i);
   }
   buf.size_ += acc_len;
-#endif
 }
 
 
@@ -188,10 +158,10 @@ void ns_mem_acc_nv(ThreadState *thr, uptr pc, uptr addr, int kAccessSizeLog, boo
   }
 
   if (is_write) {
-    DPrintf("UFO>>> #%d write %d bytes to %llu  val:%u   pc:%p\r\n",
+    DPrintf("UFO>>> #%d write %d bytes to %p  val:%u   pc:%p\r\n",
             thr->tid, (1 << kAccessSizeLog), addr, __read_addr(addr, kAccessSizeLog), pc);
   } else {
-    DPrintf("UFO>>> #%d read %d bytes from %llu val:%u   pc:%p\r\n",
+    DPrintf("UFO>>> #%d read %d bytes from %p val:%u   pc:%p\r\n",
             thr->tid, (1 << kAccessSizeLog), addr, __read_addr(addr, kAccessSizeLog), pc);
   }
 
@@ -202,31 +172,18 @@ void ns_mem_acc_nv(ThreadState *thr, uptr pc, uptr addr, int kAccessSizeLog, boo
 
   u8 sz = static_cast<u8>(kAccessSizeLog);
   type_idx |= sz << 6;
-  u64 _idx = __sync_add_and_fetch(&uctx->e_count, 1);
+  u64 _idx = __sync_add_and_fetch(&uctx->sync_seq, 1);
 
-#ifndef BUF_EVENT_ON
-  int fd = uctx->tlbufs[tid].trace_fd_;
-  MemAccEvent _e(type_idx, _idx, (u64)addr, (u64)pc);
-  internal_write(fd, &_e, sizeof(MemAccEvent));
-  return;
-#else
-//  if (UNLIKELY(buf.buf_ == nullptr)) {
-//    buf.open_buf();
-//    buf.open_file(tid);
-//  } else if (UNLIKELY(buf.size_ + sizeof(MemAccEvent) >= buf.capacity_)) {
-//    buf.flush();
-//  }
-  buf.put_event(MemAccEvent(type_idx, _idx, (u64)addr, (u64)pc));
-#endif
+  buf.put_event(MemAccEvent(type_idx, _idx, (u64) addr, (u64) pc));
 }
 
 
 __HOT_CODE
 void impl_mem_range_acc(__tsan::ThreadState *thr, uptr pc, uptr addr, uptr size, bool is_write) {
   if (is_write) {
-    DPrintf("UFO>>> #%d range write mem to %llu    len %d    pc:%p\r\n", thr->tid, addr, size, pc);
+    DPrintf("UFO>>> #%d range write mem to %p    len %d    pc:%p\r\n", thr->tid, addr, size, pc);
   } else {
-    DPrintf("UFO>>> #%d range read mem from %llu    len %d    pc:%p\r\n", thr->tid, addr, size, pc);
+    DPrintf("UFO>>> #%d range read mem from %p    len %d    pc:%p\r\n", thr->tid, addr, size, pc);
   }
 
   int tid = thr->tid;
@@ -240,12 +197,12 @@ void impl_mem_range_acc(__tsan::ThreadState *thr, uptr pc, uptr addr, uptr size,
 #endif
 
   u8 type_idx = EventType::MemRangeRead;
-  u64 _idx = __sync_add_and_fetch(&uctx->e_count, 1);
+  u64 _idx = __sync_add_and_fetch(&uctx->sync_seq, 1);
 
   if (is_write) {
     type_idx = EventType::MemRangeWrite;
   }
-  uctx->tlbufs[tid].put_event(MemRangeAccEvent(type_idx, _idx, (u64)addr, (u64)pc, (u32)size));
+  uctx->tlbufs[tid].put_event(MemRangeAccEvent(type_idx, _idx, (u64) addr, (u64) pc, (u32) size));
 }
 
 // no stack
@@ -277,17 +234,17 @@ void ns_mem_range_acc(__tsan::ThreadState *thr, uptr pc, uptr addr, uptr size, b
   }
 
   if (is_write) {
-    DPrintf("UFO>>> #%d range write mem to %llu    len %d    pc:%p\r\n", thr->tid, addr, size, pc);
+    DPrintf("UFO>>> #%d range write mem to %p    len %d    pc:%p\r\n", thr->tid, addr, size, pc);
   } else {
-    DPrintf("UFO>>> #%d range read mem from %llu    len %d    pc:%p\r\n", thr->tid, addr, size, pc);
+    DPrintf("UFO>>> #%d range read mem from %p    len %d    pc:%p\r\n", thr->tid, addr, size, pc);
   }
 
   u8 type_idx = EventType::MemRangeRead;
   if (is_write) {
     type_idx = EventType::MemRangeWrite;
   }
-  u64 _idx = __sync_add_and_fetch(&uctx->e_count, 1);
+  u64 _idx = __sync_add_and_fetch(&uctx->sync_seq, 1);
 
-  buf.put_event(MemRangeAccEvent(type_idx, _idx, (u64)addr, (u64)pc, (u32)size));
+  buf.put_event(MemRangeAccEvent(type_idx, _idx, (u64) addr, (u64) pc, (u32) size));
 }
 

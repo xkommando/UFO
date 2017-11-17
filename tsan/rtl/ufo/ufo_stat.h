@@ -1,6 +1,11 @@
 //
 // Created by xkommando on 10/15/16.
 //
+//
+//
+//  statistics
+//  (Bowen 2017-10-13)
+//
 
 #ifndef UFO_STAT_H
 #define UFO_STAT_H

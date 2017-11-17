@@ -30,7 +30,7 @@ namespace __tsan {
 
 using namespace __sanitizer;  // NOLINT
 
-static ReportStack *SymbolizeStack(StackTrace trace);
+//static ReportStack *SymbolizeStack(StackTrace trace);
 
 void TsanCheckFailed(const char *file, int line, const char *cond,
                      u64 v1, u64 v2) {
@@ -113,8 +113,8 @@ ReportStack *SymbolizeStackId(u32 stack_id) {
     return nullptr;
   return SymbolizeStack(stack);
 }
-
-static ReportStack *SymbolizeStack(StackTrace trace) {
+// declared in rtl.h
+ReportStack *SymbolizeStack(StackTrace trace) {
   if (trace.size == 0)
     return 0;
   SymbolizedStack *top = nullptr;

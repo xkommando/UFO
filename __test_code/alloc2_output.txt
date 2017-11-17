@@ -1,0 +1,85 @@
+~/workspace/poj179/test_c$ ../llvm-4.0/build/bin/clang++ -fsanitize=thread -g alloc2.cpp -o al2
+cbw@power50:~/workspace/poj179/test_c$ UFO_ON=1  ./al2 
+UFO>>> UFO (pid:15349 from:23519) enabled: record stack access; record value; do not trace func call; do not trace ptr prop; statistic set on; initial per thread buffer size:67108864 (64 MB), compress buffer; async IO queue disabled; do not print stat; max mem in hold: 0GB
+start!!!
+
+malloc1 0x7b4000000000 acc1 0x7b4000000078
+malloc2 0x7b4000000100 acc2 0x7b40000001c8
+ acc3 0x7b4000000000
+>>>__demo_detect
+
+type2  9  
+type2  9  
+type2  9  
+>>> Vec size 3
+>>> MAP size 4
+Match 0x7b4000000078 to 0x7b4000000000[250]
+   Memory Access:
+    #0 test() /home/cbw/workspace/poj179/test_c/alloc2.cpp:19:13 (al2+0x00000049ceaa)
+     #1 main /home/cbw/workspace/poj179/test_c/alloc2.cpp:73:2 (al2+0x00000049d578)
+
+   Alloc:
+    #0 test() /home/cbw/workspace/poj179/test_c/alloc2.cpp:18:18 (al2+0x00000049ce8f)
+     #1 main /home/cbw/workspace/poj179/test_c/alloc2.cpp:73:2 (al2+0x00000049d578)
+
+Match 0x7b40000001c8 to 0x7b4000000100[250]
+   Memory Access:
+    #0 test() /home/cbw/workspace/poj179/test_c/alloc2.cpp:25:13 (al2+0x00000049cf69)
+     #1 main /home/cbw/workspace/poj179/test_c/alloc2.cpp:73:2 (al2+0x00000049d578)
+
+   Alloc:
+    #0 test() /home/cbw/workspace/poj179/test_c/alloc2.cpp:24:18 (al2+0x00000049cf48)
+     #1 main /home/cbw/workspace/poj179/test_c/alloc2.cpp:73:2 (al2+0x00000049d578)
+
+Match 0x7b4000000000 to 0x7b4000000000[250]
+   Memory Access:
+    #0 test() /home/cbw/workspace/poj179/test_c/alloc2.cpp:28:6 (al2+0x00000049cffe)
+     #1 main /home/cbw/workspace/poj179/test_c/alloc2.cpp:73:2 (al2+0x00000049d578)
+
+   Alloc:
+    #0 test() /home/cbw/workspace/poj179/test_c/alloc2.cpp:18:18 (al2+0x00000049ce8f)
+     #1 main /home/cbw/workspace/poj179/test_c/alloc2.cpp:73:2 (al2+0x00000049d578)
+
+UFO>>> batch_dealloc proc(15349 0)#0  size:1073815028  num:2  total 1
+>>>__demo_detect
+
+>>> Vec size 0
+>>> MAP size 1
+malloc3 0x7f5e99e58000  0
+>>>__demo_detect
+
+type2  8  
+>>> Vec size 1
+>>> MAP size 1
+UFO>>> batch_dealloc proc(15349 0)#0  size:1073742024  num:2  total 2
+
+
+test2 malloc 1 0x7b3400000000
+test2 acc gp1 0x7b3400000000  0
+test2 malloc 2 0x7b3400006800
+test2 acc gp2 0x7b3400006800  0
+>>>__demo_detect
+
+type2  9  
+type2  50  
+>>> Parsing Error #0 e_count 18  loc 416   type_idx 0x000000000072
+
+type2  8  
+type2  32  
+>>> Parsing Error #1 e_count 15  loc 371   type_idx 0x000000000020
+
+>>> Vec size 2
+>>> MAP size 0
+UFO>>> batch_dealloc proc(15349 0)#0  size:1073742160  num:2  total 3
+UFO>>> batch_dealloc proc(15349 0)#1  size:200  num:1  total 4
+>>>__demo_detect
+
+type2  52  
+>>> Parsing Error #0 e_count 1  loc 23   type_idx 0x000000000034
+
+>>> Vec size 0
+>>> MAP size 1
+
+end!!!
+
+UFO>>> batch_dealloc proc(15349 0)#0  size:1073741824  num:2  total 5

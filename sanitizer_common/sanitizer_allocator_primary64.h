@@ -93,6 +93,10 @@ class SizeClassAllocator64 {
   }
 
   static bool CanAllocate(uptr size, uptr alignment) {
+
+    //////////////  UUUUUUUUUUUUUFFFFFFFFFFFFFFFFFFFOOOOOOOOOOOOOOOOO
+//    Printf("\r\n CanAllocate %d\r\n", SizeClassMap::kMaxSize);
+    //////////////  UUUUUUUUUUUUUFFFFFFFFFFFFFFFFFFFOOOOOOOOOOOOOOOOO
     return size <= SizeClassMap::kMaxSize &&
       alignment <= SizeClassMap::kMaxSize;
   }

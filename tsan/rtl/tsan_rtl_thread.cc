@@ -106,7 +106,7 @@ void ThreadContext::OnStarted(void *arg) {
   thr->shadow_stack_end = thr->shadow_stack + kShadowStackSize;
 #else
   // Setup dynamic shadow stack.
-  const int kInitStackSize = 8;
+  const int kInitStackSize = 64;
   thr->shadow_stack = (uptr*)internal_alloc(MBlockShadowStack,
       kInitStackSize * sizeof(uptr));
   thr->shadow_stack_pos = thr->shadow_stack;
@@ -291,6 +291,9 @@ void ThreadStart(ThreadState *thr, int tid, uptr os_id) {
 }
 
 void ThreadFinish(ThreadState *thr) {
+
+  bw::ufo::on_thread_end(thr);
+
   ThreadCheckIgnore(thr);
   StatInc(thr, StatThreadFinish);
   if (thr->stk_addr && thr->stk_size)
@@ -320,10 +323,17 @@ void ThreadJoin(ThreadState *thr, uptr pc, int tid) {
   CHECK_GT(tid, 0);
   CHECK_LT(tid, kMaxTid);
   DPrintf("#%d: ThreadJoin tid=%d\n", thr->tid, tid);
-  ctx->thread_registry->JoinThread(tid, thr);
-
+// called in main thr
+//  ThreadContext* thrbase = static_cast<ThreadContext*>(ctx->thread_registry->threads_[tid]);
+  ThreadContextBase* thrbase = ctx->thread_registry->threads_[tid];
+//  ThreadState* thr_kid = thrbase->thr;
+//  Printf("\r\n>>> kid status  %d \r\n", thrbase->status);
+//  Printf("\r\n>>> thr_kid  %p \r\n",thr_kid);
+//  Printf("\r\n>>>#%d on_thread_join proc %p \r\n",thr_kid->tid, thr_kid->proc());
+//  Printf("\r\n>>>#%d on_thread_join cache %p \r\n",thr_kid->tid, &thr_kid->proc()->alloc_cache);
   bw::ufo::on_thread_join(thr->tid, tid, pc);
 
+  ctx->thread_registry->JoinThread(tid, thr);
 }
 
 void ThreadDetach(ThreadState *thr, uptr pc, int tid) {

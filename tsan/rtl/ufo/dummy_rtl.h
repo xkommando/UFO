@@ -1,10 +1,11 @@
 //
-// Created by xkommando on 10/16/16.
-//
-
-//
 // Created by cbw on 9/26/16.
-
+//
+//
+// reset functions to the dummy implementations to stop tracing at runtime,
+// see UFOContext::start_tracing() stop_tracing()
+// (Bowen 2017-10-13)
+//
 
 #include "ufo_interface.h"
 
@@ -49,6 +50,7 @@ void nop_thread_created(int tid_parent, int tid_kid, uptr pc) {}
 void nop_thread_start(__tsan::ThreadState* thr, uptr stk_addr, uptr stk_size, uptr tls_addr, uptr tls_size){}
 
 void nop_thread_join(int tid_main, int tid_joiner, uptr pc) {}
+void nop_thread_end(ThreadState *thr) {}
 
 void nop_enter_func(ThreadState *thr, uptr pc) {}
 

@@ -590,6 +590,9 @@ class ScopedReport {
   void operator = (const ScopedReport&);
 };
 
+
+ReportStack *SymbolizeStack(__sanitizer::StackTrace trace);
+
 void RestoreStack(int tid, const u64 epoch, VarSizeStackTrace *stk,
                   MutexSet *mset);
 

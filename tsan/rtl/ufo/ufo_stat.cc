@@ -7,13 +7,13 @@
 namespace bw {
 namespace ufo {
 
-#define _P(f, ...)\
+#define ___2P(f, ...)\
   Printf(__VA_ARGS__);\
   if (f != nullptr)\
     fprintf(f, __VA_ARGS__)
 
 static void _print_state(FILE* f, int tid, const TLStatistic &stat) {
-  _P(f, "#%d |Start %llu |Join %llu |Alloc %llu |Dealloc %llu "
+  ___2P(f, "#%d |Start %llu |Join %llu |Alloc %llu |Dealloc %llu "
               "|Lock %llu |Unlock %llu |Cond Wait %llu |Cond Signal %llu | Cond BC %llu"
 
         "\r\nR1 %llu |R2 %llu |R4 %llu |R8 %llu "
@@ -35,7 +35,7 @@ static void _print_state(FILE* f, int tid, const TLStatistic &stat) {
 void summary_stat(FILE* f, TLStatistic* arr_stat, int len, u32 this_pid, u32 p_pid) {
   TLStatistic total;
   total.init();
-  _P(f, "\r\n >>>>>>>>>>>>>>>>>> Statistic (pid:%u from:%u) >>>>>>>>>>>>>>>>>>>>>>>>>>>>\r\n", this_pid, p_pid);
+  ___2P(f, "\r\n >>>>>>>>>>>>>>>>>> Statistic (pid:%u from:%u) >>>>>>>>>>>>>>>>>>>>>>>>>>>>\r\n", this_pid, p_pid);
 
   for (int i = 0; i < len; ++i) {
     if (!arr_stat[i].used())
@@ -69,9 +69,9 @@ void summary_stat(FILE* f, TLStatistic* arr_stat, int len, u32 this_pid, u32 p_p
     _print_state(f, i, arr_stat[i]);
   }
 
-  _P(f, "\r\n     ================= Total (pid:%u from:%u) =================\r\n", this_pid, p_pid);
+  ___2P(f, "\r\n     ================= Total (pid:%u from:%u) =================\r\n", this_pid, p_pid);
   _print_state(f, -1, total);
-  _P(f, "\r\n <<<<<<<<<<<<<<<<<<<< Statistic <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\r\n");
+  ___2P(f, "\r\n <<<<<<<<<<<<<<<<<<<< Statistic <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\r\n");
 }
 
 
@@ -103,7 +103,7 @@ void print_csv(FILE* f, TLStatistic* arr_stat, int len, u32 this_pid, u32 p_pid)
 
 
 
-#undef _P
+#undef ___2P
 
 }
 }

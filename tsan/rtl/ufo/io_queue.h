@@ -1,6 +1,10 @@
 //
 // Created by xkommando on 10/21/16.
 //
+//
+// async IO queue for TLBuffer
+//(Bowen 2017-10-13)
+//
 
 #ifndef UFO_IO_Q_H
 #define UFO_IO_Q_H
@@ -25,7 +29,7 @@ using __sanitizer::uptr;
 using __sanitizer::Printf;
 
 struct WriteTask {
-  int fd_;
+//  int fd_;
   Byte *data_;
   u32 size_;
   u32 cap_;
@@ -33,7 +37,7 @@ struct WriteTask {
   ALWAYS_INLINE
   void load_with(TLBuffer *buf) {
 
-    this->fd_ = buf->trace_fd_;
+//    this->fd_ = buf->trace_fd_;
     this->size_ = buf->size_;
     buf->size_ = 0;
 

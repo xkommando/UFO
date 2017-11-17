@@ -117,7 +117,7 @@ class ThreadRegistry {
   void FinishThread(u32 tid);
   void StartThread(u32 tid, uptr os_id, void *arg);
 
- private:
+// private:
   const ThreadContextFactory context_factory_;
   const u32 max_threads_;
   const u32 thread_quarantine_size_;

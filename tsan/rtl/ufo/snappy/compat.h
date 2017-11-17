@@ -1,3 +1,6 @@
+
+
+
 #ifndef _LINUX_SNAPPY_COMPACT_H
 #define _LINUX_SNAPPY_COMPACT_H 1
 
