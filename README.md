@@ -1,4 +1,3 @@
-UFO
 UFO: Use-After-Free Finder Optimal
 
 There are three versions/branches:
