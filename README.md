@@ -1,6 +1,14 @@
 UFO
 UFO: Use-After-Free Finder Optimal
 
+There are three versions/branches:
+Basic version: tracing and flush to disk
+With pointer tracking: additional instrumentation and dynamic pointer tracing
+Online: Buffer events and run simple matching, no disk I/O
+
+See doc:
+https://github.com/xkommando/UFO/blob/trace_online_api/tsan/rtl/ufo/doc/structure.md
+
 # Tracing
 
 ##Set up 
